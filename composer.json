@@ -1,0 +1,25 @@
+{
+  "name": "vulpes/access-token",
+  "type": "library",
+  "description": "Access token utility.",
+  "keywords": ["token","token-utility"],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "András Würth",
+      "email": "wuertha@live.com"
+    }
+  ],
+  "require": {
+    "php": ">=8.1",
+    "ext-openssl": "*",
+    "firebase/php-jwt": "^6.5",
+    "vulpes/clock": "^1.0",
+    "vulpes/cache": "^1.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "Token\\": "src/"
+    }
+  }
+}
