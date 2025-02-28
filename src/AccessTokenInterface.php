@@ -2,9 +2,17 @@
 
 namespace Token;
 
+use Throwable;
+
 interface AccessTokenInterface
 {
-    public function getToken(): string;
+    /**
+     * @throws Throwable
+     */
+    public function generateToken(): string;
 
-    public function getProjectId(): null|string;
+    /**
+     * @throws Throwable
+     */
+    public function decodeToken(string $token): array;
 }

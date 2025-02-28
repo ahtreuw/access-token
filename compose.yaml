@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: "/app/service-account.json"
+    command: /bin/sh -c "composer install && php-fpm"
+    volumes:
+      - .:/app:rw
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: php ping.php | grep "PONG"
+      start_period: 1m
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - internal
+networks:
+  internal:
+    driver: bridge

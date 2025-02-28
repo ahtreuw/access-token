@@ -2,98 +2,79 @@
 
 namespace Token;
 
-use Cache\InMemoryCache;
-use Clock\Clock;
-use Clock\ClockInterface;
-use DateInterval;
-use DateTimeInterface;
 use InvalidArgumentException;
-use JetBrains\PhpStorm\ArrayShape;
-use OpenSSLAsymmetricKey;
-use OpenSSLCertificate;
-use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 
-class GoogleAccessToken extends JWTAccessToken implements AccessTokenInterface
+class GoogleAccessToken extends AccessToken implements AccessTokenInterface
 {
-    public function __construct(
-        string                                              $scope,
-        null|string                                         $projectId = null,
-        null|string                                         $clientEmail = null,
-        OpenSSLAsymmetricKey|OpenSSLCertificate|string|null $privateKey = null,
-        null|string                                         $privateKeyId = null,
+    private const SERVICE_ACCOUNT = 'service_account';
+    private const GOOGLE_APPLICATION_CREDENTIALS = 'GOOGLE_APPLICATION_CREDENTIALS';
+    private const FILE_NOT_EXISTS = 'File not exists to get key: %s';
+    private const ERROR_GET_FILE_CONTENTS = 'Error while get key from file: %s';
+    private const INVALID_SERVICE_ACCOUNT_KEY = 'Invalid service account key.';
 
-        /**
-         * @link https://cloud.google.com/iam/docs/keys-create-delete
-         */
-        null|string                                         $keyFile = null,
+    public null|string $type = null;
+    public null|string $project_id = null;
+    public null|string $client_email = null;
+    public null|string $client_id = null;
+    public null|string $auth_uri = null;
+    public null|string $token_uri = null;
+    public null|string $auth_provider_x509_cert_url = null;
+    public null|string $client_x509_cert_url = null;
+    public null|string $universe_domain = null;
+    protected null|array $scopes = [];
 
-        null|string|int|DateInterval|DateTimeInterface      $exp = 'PT1H',
-        null|string|int|DateInterval|DateTimeInterface      $iat = 'PT1M',
-
-        /**
-         * (Algorithm) Header Parameter Value for JWS
-         * @link https://datatracker.ietf.org/doc/html/rfc7518#section-3.1
-         */
-        string                                              $algorithm = 'RS256',
-
-        ClockInterface                                      $clock = new Clock,
-        CacheInterface                                      $cache = new InMemoryCache,
-        string                                              $cachePrefix = 'google.access.token:'
-    )
+    public function __construct(string $serviceAccountFilename = null, mixed ...$data)
     {
-        if (false === is_null($keyFile)) {
-            [
-                'project_id' => $projectId, 'private_key' => $privateKey,
-                'private_key_id' => $privateKeyId, 'client_email' => $clientEmail
-            ] = $this->readServiceAccountData($keyFile);
-        }
-
-        parent::__construct(
-            payload: [
-                'iss' => $clientEmail,
-                'sub' => $clientEmail,
-                'exp' => $exp,
-                'iat' => $iat,
-                'scope' => $scope
-            ],
-            algorithm: $algorithm,
-            privateKey: $privateKey,
-            privateKeyId: $privateKeyId,
-            projectId: $projectId,
-            clock: $clock,
-            cache: $cache,
-            cachePrefix: $cachePrefix
-        );
+        parent::__construct(...$data);
+        $this->init($serviceAccountFilename);
     }
 
-    public function getProjectId(): string
+    public function getScopes(): ?array
     {
-        return $this->projectId;
+        return $this->scopes;
     }
 
-    #[ArrayShape([
-        'project_id' => "string",
-        'private_key' => "string",
-        'private_key_id' => "string",
-        'client_email' => "string"
-    ])]
-    protected function readServiceAccountData(string $serviceAccountKeyFile): array
+    public function setScopes(string ...$scopes): void
     {
-        if (file_exists($serviceAccountKeyFile) === false) {
-            throw new RuntimeException(sprintf('File not exists to get key: %s', $serviceAccountKeyFile));
+        $this->scopes = $scopes;
+    }
+
+    protected function generatePayload(): array
+    {
+        if (is_null($this->scopes)) {
+            throw new RuntimeException(sprintf(self::CANNOT_GENERATE_TOKEN, 'payload.scopes'));
+        }
+        $now = time();
+        return [
+            'iss' => $this->client_email,
+            'sub' => $this->client_email,
+            'iat' => $now,
+            'exp' => $now + 3600,
+            'scope' => implode(' ', $this->scopes)
+        ];
+    }
+
+    public function init(null|string $serviceAccountFilename = null): void
+    {
+        $serviceAccountFilename = $serviceAccountFilename ?? getenv(self::GOOGLE_APPLICATION_CREDENTIALS);
+
+        if (file_exists($serviceAccountFilename) === false) {
+            throw new RuntimeException(sprintf(self::FILE_NOT_EXISTS, $serviceAccountFilename));
         }
 
-        if (($serviceAccountKeyFileContent = file_get_contents($serviceAccountKeyFile)) === false) {
-            throw new RuntimeException(sprintf('Error while get key from file: %s', $serviceAccountKeyFile));
+        if (($serviceAccountKeyFileContent = file_get_contents($serviceAccountFilename)) === false) {
+            throw new RuntimeException(sprintf(self::ERROR_GET_FILE_CONTENTS, $serviceAccountFilename));
         }
 
         $serviceAccountData = json_decode($serviceAccountKeyFileContent, true);
 
-        if (($serviceAccountData['type'] ?? null) !== 'service_account') {
-            throw new InvalidArgumentException('Invalid service account key.');
+        if (($serviceAccountData['type'] ?? null) !== self::SERVICE_ACCOUNT) {
+            throw new InvalidArgumentException(self::INVALID_SERVICE_ACCOUNT_KEY);
         }
 
-        return $serviceAccountData;
+        foreach ($serviceAccountData as $property => $value) {
+            property_exists($this, $property) && $this->$property = $value;
+        }
     }
 }
